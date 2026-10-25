@@ -489,9 +489,18 @@ function bersihkanTanda(){
 }
 
 function periksa(){
+  if (!lastHasil) {
+    hitung();                                   // koordinat sudah diisi tapi belum dihitung: hitung otomatis dulu
+    if (!lastHasil) {
+      bersihkanTanda();
+      $("cekHasil").innerHTML = "<p>Isi koordinat tempat lalu tekan \"Hitung arah kiblat\", atau ambil soal acak dulu, baru jawabanmu bisa diperiksa.</p>";
+      $("err").textContent = "";
+      tampilkanHasilCek();
+      return;
+    }
+  }
   bersihkanTanda();
   const out = $("cekHasil");
-  if (!lastHasil) { out.innerHTML = "<p>Hitung arah kiblat atau ambil soal acak dulu, baru jawabanmu bisa diperiksa.</p>"; return; }
   const {k} = lastHasil;
   const kunci = {a: r5(k.a), b: r5(k.b), C: k.C, cotB: k.special ? null : k.cotB, B: k.B, az: k.az};
   const tertutup = document.body.classList.contains("tertutup");
@@ -532,6 +541,13 @@ function periksa(){
     if (tertutup && benar < diisi) html += '<p>Perbaiki lalu periksa lagi, atau tekan "Tampilkan pembahasan".</p>';
   }
   out.innerHTML = html;
+  tampilkanHasilCek();
+}
+
+/* Pastikan kotak hasil pemeriksaan terlihat (di HP bisa berada di luar layar) */
+function tampilkanHasilCek(){
+  const out = $("cekHasil"), r = out.getBoundingClientRect();
+  if (r.bottom > window.innerHeight || r.top < 0) out.scrollIntoView({block: "nearest", behavior: "smooth"});
 }
 
 $("cekBtn").onclick = periksa;
