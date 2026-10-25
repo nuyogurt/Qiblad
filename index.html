@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Qiblad: Kalkulator Arah Kiblat</title>
+<meta name="description" content="Kalkulator arah kiblat dengan rumus segitiga bola: lengkap dengan langkah perhitungan, visualisasi Sudut B dan Azimuth, mode latihan, dan kompas langsung.">
+<meta name="theme-color" content="#0e6b5e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230e6b5e'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%23ffffff55' stroke-width='2'/%3E%3Cpath d='M32 9 L38 32 L32 36 L26 32 Z' fill='%23fff'/%3E%3Cpath d='M32 55 L38 32 L32 28 L26 32 Z' fill='%23ffffff66'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -22,9 +25,12 @@
     </div>
   </header>
 
+  <!-- Hanya tampil saat dicetak / disimpan sebagai PDF -->
+  <div class="print-head" id="printHead" aria-hidden="true"></div>
+
   <div class="grid">
     <div class="col">
-    <section class="panel" aria-labelledby="in">
+    <section class="panel" id="inPanel" aria-labelledby="in">
       <h2 id="in">Koordinat tempat</h2>
       <div class="tabs" role="tablist" aria-label="Format input">
         <button role="tab" id="tDMS" aria-selected="true" type="button">DMS</button>
@@ -76,11 +82,19 @@
     <section class="panel" aria-labelledby="kmp">
       <h2 id="kmp">Kompas kiblat</h2>
       <svg class="compass kosong" viewBox="0 -14 400 414" role="img" aria-label="Kompas arah kiblat" id="svg">
+        <defs>
+          <marker id="panahB" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 Z" fill="var(--brass)"/>
+          </marker>
+        </defs>
         <g id="dial">
         <circle cx="200" cy="200" r="168" fill="none" stroke="var(--line)" stroke-width="1.5"/>
         <circle cx="200" cy="200" r="120" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 6"/>
         <g id="ticks"></g>
         <path id="arc" fill="var(--teal-soft)" d=""/>
+        <path id="arcB" fill="none" stroke="var(--brass)" stroke-width="3.5" stroke-linecap="round" marker-end="url(#panahB)" d=""/>
+        <text id="lblAz" class="arclbl lbl-az" text-anchor="middle" dominant-baseline="central"></text>
+        <text id="lblB" class="arclbl lbl-b" text-anchor="middle" dominant-baseline="central"></text>
         <line x1="200" y1="200" x2="200" y2="36" stroke="var(--ink)" stroke-width="2.5"/>
         <g class="needle" id="needle" style="transform:rotate(0deg)">
           <path d="M200 44 L211 200 L200 212 L189 200 Z" fill="var(--needle)"/>
@@ -91,6 +105,11 @@
         <path id="phoneMark" aria-hidden="true" d="M192 -13 L208 -13 L200 3 Z"/>
         <circle cx="200" cy="200" r="9" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>
       </svg>
+      <div class="legend" id="legend" hidden>
+        <button type="button" class="lg lg-az" aria-pressed="true" data-k="az"><i aria-hidden="true"></i>Azimuth <b id="lgAz">–</b></button>
+        <button type="button" class="lg lg-b" aria-pressed="true" data-k="b"><i aria-hidden="true"></i>Sudut B <b id="lgB">–</b></button>
+      </div>
+      <p class="arcnote" id="arcNote" hidden></p>
       <div class="live">
         <button class="btn ghost" id="liveBtn" type="button">Aktifkan kompas langsung</button>
         <div class="liveopts" id="liveOpts" hidden>
@@ -103,14 +122,44 @@
       </div>
     </section>
     <section class="panel" aria-labelledby="out">
-      <h2 id="out">Hasil</h2>
+      <div class="panelhead">
+        <h2 id="out">Hasil</h2>
+        <button class="btn ghost sm" id="copyBtn" type="button" hidden>Salin hasil</button>
+      </div>
+      <p class="cover">Jawaban disembunyikan selama latihan. Kerjakan manual dulu, lalu periksa di panel latihan.</p>
       <div class="readout" id="readout"><p class="empty" style="grid-column:1/-1">Masukkan koordinat tempat, lalu tekan "Hitung arah kiblat".</p></div>
     </section>
     </div>
     <div class="col">
+  <section class="panel latihan" id="latihanPanel" aria-labelledby="lt">
+    <details id="latihanDetails">
+      <summary id="lt">Latihan &amp; cek jawaban</summary>
+      <p class="hint">Kerjakan perhitungan secara manual, lalu masukkan hasilmu. Qiblad menandai langkah yang benar dan menunjukkan di mana kesalahan pertama terjadi. Sudut boleh ditulis desimal (97,5) atau DMS (97 30 0).</p>
+      <div class="actions">
+        <button class="btn ghost" id="soalBtn" type="button">Ambil soal acak</button>
+        <button class="btn ghost" id="bukaBtn" type="button" hidden>Tampilkan pembahasan</button>
+      </div>
+      <p class="soal" id="soalInfo" hidden></p>
+      <div class="cekgrid" id="cekGrid">
+        <div class="cek" data-k="a"><label class="s" for="cek-a">a = 90° − φ tempat</label><input id="cek-a" type="text" inputmode="decimal" autocomplete="off" placeholder="…°"><span class="mark" aria-hidden="true"></span></div>
+        <div class="cek" data-k="b"><label class="s" for="cek-b">b = 90° − φ Ka'bah</label><input id="cek-b" type="text" inputmode="decimal" autocomplete="off" placeholder="…°"><span class="mark" aria-hidden="true"></span></div>
+        <div class="cek" data-k="C"><label class="s" for="cek-C">C = selisih bujur</label><input id="cek-C" type="text" inputmode="decimal" autocomplete="off" placeholder="…°"><span class="mark" aria-hidden="true"></span></div>
+        <div class="cek" data-k="cotB"><label class="s" for="cek-cotB">cot B</label><input id="cek-cotB" type="text" inputmode="decimal" autocomplete="off" placeholder="…"><span class="mark" aria-hidden="true"></span></div>
+        <div class="cek" data-k="B"><label class="s" for="cek-B">Sudut B</label><input id="cek-B" type="text" inputmode="decimal" autocomplete="off" placeholder="…°"><span class="mark" aria-hidden="true"></span></div>
+        <div class="cek" data-k="az"><label class="s" for="cek-az">Azimuth kiblat</label><input id="cek-az" type="text" inputmode="decimal" autocomplete="off" placeholder="…°"><span class="mark" aria-hidden="true"></span></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="cekBtn" type="button">Periksa jawaban</button>
+        <button class="btn ghost" id="cekReset" type="button">Kosongkan</button>
+      </div>
+      <div class="cekhasil" id="cekHasil" role="status" aria-live="polite"></div>
+    </details>
+  </section>
   <section class="panel steps" id="stepsPanel">
-    <details open>
+    <details open id="stepsDetails">
       <summary>Langkah perhitungan</summary>
+      <div class="stepbar" id="stepBar" hidden><button class="btn ghost sm" id="printBtn" type="button">Cetak / simpan PDF</button></div>
+      <p class="cover">Pembahasan disembunyikan selama latihan.</p>
       <div id="steps"><p class="empty">Rincian langkah perhitungan akan muncul di sini setelah kamu menekan "Hitung arah kiblat".</p></div>
     </details>
   </section>

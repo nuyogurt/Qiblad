@@ -78,7 +78,7 @@ details[open]>summary{margin-bottom:14px}
 .steps section{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)}
 .steps section:first-child{margin-top:0;border:0;padding:0}
 .steps .h{font:600 .9rem "Instrument Sans",sans-serif;color:var(--brass);margin-bottom:4px}
-.eqwrap{overflow-x:auto;padding:2px 0}
+.eqwrap{overflow-x:auto;overflow-y:hidden;padding:2px 0}
 math{font-size:1.15rem;font-family:"STIX Two Math","Cambria Math","Latin Modern Math","Times New Roman",serif;color:var(--ink);math-style:normal}
 mtd{padding:.12em .25em;math-style:normal}
 mtr.mulai mtd{padding-top:.75em}
@@ -115,3 +115,84 @@ a.btn{display:inline-block;text-decoration:none}
 #arc{transition:opacity .4s}
 .compass.kosong #needle,.compass.kosong #arc{opacity:0}
 @media(prefers-reduced-motion:reduce){#needle,#arc{transition:none}}
+
+/* ---- Sudut B vs Azimuth pada kompas ---- */
+#arcB,.arclbl{transition:opacity .4s}
+.compass.kosong #arcB,.compass.kosong .arclbl{opacity:0}
+.arclbl{font:700 15px "Instrument Sans",sans-serif;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+.lbl-az{fill:var(--teal)}
+.lbl-b{fill:var(--brass)}
+.compass.hide-az #arc,.compass.hide-az #lblAz{opacity:0}
+.compass.hide-b #arcB,.compass.hide-b #lblB{opacity:0}
+.legend{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin-top:10px}
+.legend[hidden]{display:none}
+.lg{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:6px 12px;font:500 .88rem "Instrument Sans",sans-serif;cursor:pointer;transition:opacity .2s,border-color .2s}
+.lg b{font:500 .88rem "JetBrains Mono",ui-monospace,monospace}
+.lg i{width:14px;height:14px;border-radius:4px;flex:none}
+.lg-az i{background:var(--teal-soft);box-shadow:inset 0 0 0 2px var(--teal)}
+.lg-b i{height:4px;border-radius:2px;background:var(--brass)}
+.lg[aria-pressed="false"]{opacity:.45}
+.lg[aria-pressed="false"] b{text-decoration:line-through}
+.arcnote{font-size:.88rem;color:var(--mute);text-align:center;max-width:52ch;margin:10px auto 0}
+.arcnote[hidden]{display:none}
+.arcnote b{color:var(--ink)}
+
+/* ---- kepala panel dengan tombol kecil ---- */
+.panelhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.panelhead h2{margin:0}
+.btn.sm{padding:7px 12px;font-size:.85rem;border-radius:10px}
+.btn[hidden]{display:none}
+.stepbar{display:flex;justify-content:flex-end;margin:-4px 0 10px}
+.stepbar[hidden]{display:none}
+
+/* ---- latihan & cek jawaban ---- */
+.col:last-child>.panel.latihan{flex:none}
+.latihan .hint{margin:0 0 12px}
+.soal{border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:10px;background:var(--bg);padding:10px 12px;margin:12px 0 0;font-size:.9rem}
+.soal[hidden]{display:none}
+.cekgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin:16px 0 14px}
+.cek{position:relative}
+.cek input{padding-right:34px}
+.cek .mark{position:absolute;right:10px;bottom:10px;font:700 1rem "Instrument Sans",sans-serif;line-height:1.4}
+.cek.benar input{border-color:var(--teal);background:var(--teal-soft)}
+.cek.benar .mark{color:var(--teal)}
+.cek.benar .mark::before{content:"✓"}
+.cek.salah input{border-color:var(--danger)}
+.cek.salah .mark{color:var(--danger)}
+.cek.salah .mark::before{content:"✗"}
+.cek.na input{opacity:.5}
+.cekhasil:empty{display:none}
+.cekhasil{border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:12px 14px;margin-top:14px;font-size:.9rem}
+.cekhasil.ok{border-color:var(--teal);background:var(--teal-soft)}
+.cekhasil p{margin:0}
+.cekhasil p+p,.cekhasil ul{margin-top:8px}
+.cekhasil ul{margin-bottom:0;padding-left:1.2em}
+.cekhasil li+li{margin-top:6px}
+.cekhasil .kunci{font-family:"JetBrains Mono",ui-monospace,monospace;color:var(--teal)}
+@media(max-width:420px){.cekgrid{grid-template-columns:1fr}}
+
+/* ---- jawaban disembunyikan saat latihan ---- */
+.cover{display:none;border:1px dashed var(--line);border-radius:12px;padding:12px 14px;margin:0 0 12px;font-size:.9rem;color:var(--mute);text-align:center}
+.tertutup .cover{display:block}
+.tertutup #readout,.tertutup #steps{filter:blur(9px);user-select:none;pointer-events:none}
+.tertutup #needle,.tertutup #arc,.tertutup #arcB,.tertutup .arclbl{opacity:0}
+.tertutup .legend,.tertutup .arcnote,.tertutup #copyBtn,.tertutup .stepbar{display:none}
+
+/* ---- cetak / simpan PDF ---- */
+.print-head{display:none}
+@media print{
+  html:root[data-theme][data-tema]{--bg:#fff;--panel:#fff;--ink:#111;--mute:#555;--line:#cfcfcf;--field:#fff;--teal:#0e6b5e;--teal-soft:rgba(14,107,94,.12);--needle:#0e6b5e;--brass:#8c6514}
+  body{background:#fff;font-size:12pt}
+  .wrap{max-width:none;padding:0}
+  header{margin-bottom:12px}
+  header>div:first-child>p:not(.sub),.opts,.tabs,.cityrow,.actions,.err,.toast,.live,.latihan,.panelhead .btn,.stepbar,.foot .btn,.foot>p:first-child,details>summary::after{display:none!important}
+  .print-head{display:block;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:11pt}
+  .grid{display:block}
+  .col{display:block}
+  .panel{border:1px solid var(--line);padding:14px;margin-bottom:12px;break-inside:avoid}
+  .steps{break-inside:auto}
+  .steps section{break-inside:avoid}
+  .compass{max-width:300px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .stat.main,.legend{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  input,select{border-color:var(--line)}
+}

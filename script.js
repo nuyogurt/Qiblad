@@ -68,12 +68,25 @@ function notasiArah(B, timur){
    UI
    ===================================================== */
 const $ = id => document.getElementById(id);
-const CITIES = {
-  "Yogyakarta":[-7.78333,110.36667], "Jakarta":[-6.2,106.81667], "Surabaya":[-7.25,112.75],
-  "Medan":[3.58333,98.66667], "Makassar":[-5.14,119.41], "Denpasar":[-8.65,115.21667], "Jayapura":[-2.53,140.7]
+const CITY_GROUPS = {
+  "Indonesia": {
+    "Yogyakarta":[-7.78333,110.36667], "Jakarta":[-6.2,106.81667], "Surabaya":[-7.25,112.75],
+    "Medan":[3.58333,98.66667], "Makassar":[-5.14,119.41], "Denpasar":[-8.65,115.21667], "Jayapura":[-2.53,140.7]
+  },
+  "Dunia (barat Ka'bah dan selisih bujur > 180°)": {
+    "Kairo":[30.0444,31.2357], "London":[51.5074,-0.1278], "New York":[40.7128,-74.006], "Honolulu":[21.3069,-157.8583]
+  }
 };
+const CITIES = Object.assign({}, ...Object.values(CITY_GROUPS));
+/* Lokasi tambahan untuk soal latihan: campuran timur/barat Ka'bah dan belahan utara/selatan */
+const PRACTICE = Object.assign({}, CITIES, {
+  "Banda Aceh":[5.5483,95.3238], "Pontianak":[-0.0263,109.3425], "Kuala Lumpur":[3.139,101.6869],
+  "Tokyo":[35.6762,139.6503], "Sydney":[-33.8688,151.2093], "Istanbul":[41.0082,28.9784],
+  "Cape Town":[-33.9249,18.4241], "Rio de Janeiro":[-22.9068,-43.1729]
+});
 let mode = "DMS";
 let qiblaAz = null;   // azimuth kiblat hasil hitung terakhir
+let lastHasil = null; // {k, lat, lng} hasil hitung terakhir, dipakai panel latihan dan salin hasil
 
 (function gambarSkala(){
   let h = "";
@@ -120,7 +133,8 @@ $("undoBtn").onclick = () => {
   else { $("readout").classList.remove("usang"); $("svg").classList.remove("usang"); }
   $("toast").hidden = true; undoInfo = null;
 };
-$("citySel").innerHTML = '<option value="">Isi dengan contoh kota…</option>' + Object.keys(CITIES).map(n => `<option>${n}</option>`).join("");
+$("citySel").innerHTML = '<option value="">Isi dengan contoh kota…</option>' + Object.entries(CITY_GROUPS)
+  .map(([grup, kota]) => `<optgroup label="${grup}">${Object.keys(kota).map(n => `<option>${n}</option>`).join("")}</optgroup>`).join("");
 $("citySel").onchange = e => {
   const nama = e.target.value;
   if (!nama) return;
@@ -167,8 +181,12 @@ document.querySelector(".swatches").onclick = e => {
 };
 terapkanMode(bacaPref("qiblad.mode") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 terapkanTema(bacaPref("qiblad.tema"));
-$("go").onclick = hitung;
-document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.tagName === "INPUT") hitung(); });
+$("go").onclick = () => hitung();
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.target.tagName !== "INPUT") return;
+  if (e.target.closest("#inPanel")) hitung();          // hanya kolom koordinat yang memicu hitung
+  else if (e.target.closest("#cekGrid")) periksa();    // kolom latihan memicu pemeriksaan
+});
 
 /* ---------- pembangun persamaan MathML ---------- */
 const MX = {
@@ -210,8 +228,10 @@ function bacaInput(){
   return {lat, lng, info};
 }
 
-function hitung(){
+function hitung(tutup){            // tutup === true: hitung diam-diam untuk soal latihan
   $("err").textContent = "";
+  setTertutup(tutup === true);
+  if (tutup !== true) $("soalInfo").hidden = true;
   $("readout").classList.remove("usang"); $("svg").classList.remove("usang");
   if (undoInfo && !undoInfo.hitungUlang) { $("toast").hidden = true; undoInfo = null; }   // pesan "tekan Hitung" sudah tidak relevan
   let inp;
@@ -234,6 +254,10 @@ function hitung(){
   requestAnimationFrame(() => requestAnimationFrame(() => needle.style.transform = `rotate(${az}deg)`));
   const R = 168, x = 200 + R * Math.sin(rad(az)), y = 200 - R * Math.cos(rad(az));
   $("arc").setAttribute("d", az === 0 ? "" : `M200 200 L200 ${200-R} A${R} ${R} 0 ${az > 180 ? 1 : 0} 1 ${x} ${y} Z`);
+  lastHasil = {k, lat, lng};
+  gambarSudutB(k);
+  $("copyBtn").hidden = false; $("stepBar").hidden = false;
+  bersihkanTanda();   // tanda benar/salah lama mengacu ke hitungan sebelumnya
 
   /* langkah perhitungan (persamaan MathML) */
   const S = [], bagian = (judul, isi) => S.push(`<section><div class="h">${judul}</div>${isi}</section>`);
@@ -368,3 +392,185 @@ function matikanLive(){
   $("liveBtn").textContent = "Aktifkan kompas langsung";
 }
 $("liveBtn").onclick = () => live.aktif ? matikanLive() : aktifkanLive();
+
+/* ---------- Sudut B vs Azimuth pada kompas ---------- */
+const titik = (r, t) => [200 + r * Math.sin(rad(t)), 200 - r * Math.cos(rad(t))];   // t: derajat dari Utara searah jarum jam
+function busur(r, t0, t1){                                                          // t1 > t0: searah jarum jam
+  const [x0, y0] = titik(r, t0), [x1, y1] = titik(r, t1);
+  return `M${x0} ${y0} A${r} ${r} 0 ${Math.abs(t1 - t0) > 180 ? 1 : 0} ${t1 > t0 ? 1 : 0} ${x1} ${y1}`;
+}
+function gambarSudutB(k){
+  const {az, B, timur, special} = k;
+  // Sudut B diukur dari Utara menuju sisi Ka'bah: ke barat (berlawanan jarum jam) bila tempat di timur Ka'bah
+  const ujungB = special ? az : timur ? -B : B;
+  $("arcB").setAttribute("d", ujungB === 0 ? "" : busur(100, 0, ujungB));
+  const tulis = (id, r, t, teks) => {
+    const [x, y] = titik(r, t), el = $(id);
+    el.setAttribute("x", x); el.setAttribute("y", y); el.textContent = teks;
+  };
+  tulis("lblAz", 140, az / 2, az === 0 ? "" : "Az");
+  tulis("lblB", 74, ujungB / 2, ujungB === 0 ? "" : "B");
+
+  $("lgAz").textContent = `${az.toFixed(2)}°`;
+  $("lgB").textContent = `${B.toFixed(2)}°`;
+  $("arcNote").innerHTML = special
+    ? `Tempat sebujur atau berseberangan bujur dengan Ka'bah (atau di kutub), sehingga kiblat lurus ke <b>${az === 0 ? "Utara" : "Selatan"}</b> dan Sudut B sama dengan Azimuth.`
+    : timur
+      ? `Tempat di <b>timur</b> Ka'bah. Sudut B diukur dari Utara <b>berlawanan</b> arah jarum jam ke Barat, sedangkan Azimuth diukur dari Utara <b>searah</b> jarum jam. Keduanya berakhir di arah yang sama, sehingga Azimuth = 360° − ${B.toFixed(2)}° = ${az.toFixed(2)}°.`
+      : `Tempat di <b>barat</b> Ka'bah. Sudut B dan Azimuth sama-sama diukur dari Utara <b>searah</b> jarum jam, sehingga Azimuth = B = ${az.toFixed(2)}°.`;
+  $("legend").hidden = false; $("arcNote").hidden = false;
+}
+$("legend").onclick = e => {
+  const b = e.target.closest(".lg");
+  if (!b) return;
+  const on = b.getAttribute("aria-pressed") !== "true";
+  b.setAttribute("aria-pressed", String(on));
+  $("svg").classList.toggle(b.dataset.k === "az" ? "hide-az" : "hide-b", !on);
+};
+
+/* ---------- latihan & cek jawaban ---------- */
+const URUTAN_CEK = ["a", "b", "C", "cotB", "B", "az"];
+const NAMA_CEK = {a: "a", b: "b", C: "C", cotB: "cot B", B: "Sudut B", az: "Azimuth"};
+let soalTerakhir = null;
+
+function setTertutup(on){
+  document.body.classList.toggle("tertutup", on);
+  $("bukaBtn").hidden = !on;
+}
+
+/* Terima desimal (97,5 atau 97.5) maupun DMS (97 30 0 atau 97°30'0"). null = kosong, NaN = tidak terbaca. */
+function bacaSudut(s){
+  s = s.trim().replace(/,/g, ".");
+  if (!s) return null;
+  const neg = /^[-−]/.test(s);
+  const bagian = s.replace(/^[-−]\s*/, "").split(/[°'′"″\s]+/).filter(Boolean);
+  if (!bagian.length || bagian.length > 3) return NaN;
+  const [d, m = 0, sd = 0] = bagian.map(Number);
+  if ([d, m, sd].some(isNaN)) return NaN;
+  const v = d + m / 60 + sd / 3600;
+  return neg ? -v : v;
+}
+
+function cocok(key, v, kunci){
+  if (key === "cotB") return Math.abs(v - kunci) <= Math.max(0.001, Math.abs(kunci) * 5e-4);
+  if (key === "az") return Math.abs(normDiff(v - kunci)) <= 0.01;
+  return Math.abs(v - kunci) <= 0.01;                               // ±0,01° (±36″) memberi ruang pembulatan manual
+}
+
+function petunjuk(key, v, k){
+  const dekat = (x, y) => Math.abs(normDiff(x - y)) <= 0.05;
+  switch (key) {
+    case "a": return k.lat < 0
+      ? "a = 90° − φ tempat. Lintang selatan bernilai negatif, jadi a = 90° + |φ| (lebih dari 90°)."
+      : "a = 90° − φ tempat.";
+    case "b": return `b = 90° − φ Ka'bah = 90° − ${KAABA.lat}°.`;
+    case "C": return k.bujurRaw > 180
+      ? `Selisih bujur ${k.bujurRaw}° melebihi 180°, jadi ambil sisi terpendek: 360° − ${k.bujurRaw}°.`
+      : "C = |λ tempat − λ Ka'bah|. Ingat, bujur barat (BB) bernilai negatif.";
+    case "cotB": return "cot B = cot b × sin a ÷ sin C − cos a × cot C. Periksa tanda negatif dan pembulatan nilai trigonometri.";
+    case "B":
+      if (v < 0 || dekat(v + 180, k.B)) return "cot B bernilai negatif sehingga arccot menghasilkan sudut negatif. Tambahkan 180° pada hasilnya.";
+      if (k.timur && dekat(v, k.az)) return "Itu nilai Azimuth. Sudut B diukur dari Utara ke arah Ka'bah dan belum dikonversi.";
+      return "B = arccot(cot B), yaitu arctan(1 ÷ cot B).";
+    case "az":
+      if (k.special) return `${k.rumus}.`;
+      if (k.timur && dekat(v, k.B)) return "Tempat ini di timur Ka'bah, jadi Azimuth = 360° − B, bukan B.";
+      if (!k.timur && dekat(v, 360 - k.B)) return "Tempat ini di barat Ka'bah, jadi Azimuth = B (tidak dikurangkan dari 360°).";
+      return k.timur ? "Tempat di timur Ka'bah: Azimuth = 360° − B." : "Tempat di barat Ka'bah: Azimuth = B.";
+  }
+  return "";
+}
+
+const fmtKunci = (key, v) => key === "cotB" ? String(v) : `${v}° (${fmtDMS(toDMS(v))})`;
+
+function bersihkanTanda(){
+  document.querySelectorAll(".cek").forEach(c => c.classList.remove("benar", "salah", "na"));
+  $("cekHasil").className = "cekhasil"; $("cekHasil").innerHTML = "";
+}
+
+function periksa(){
+  bersihkanTanda();
+  const out = $("cekHasil");
+  if (!lastHasil) { out.innerHTML = "<p>Hitung arah kiblat atau ambil soal acak dulu, baru jawabanmu bisa diperiksa.</p>"; return; }
+  const {k} = lastHasil;
+  const kunci = {a: r5(k.a), b: r5(k.b), C: k.C, cotB: k.special ? null : k.cotB, B: k.B, az: k.az};
+  const tertutup = document.body.classList.contains("tertutup");
+  let diisi = 0, benar = 0, salahPertama = null;
+  const catatan = [], takTerbaca = [];
+
+  for (const key of URUTAN_CEK) {
+    const box = document.querySelector(`.cek[data-k="${key}"]`);
+    const v = bacaSudut($(`cek-${key}`).value);
+    if (v === null) continue;
+    if (kunci[key] === null) {
+      box.classList.add("na");
+      catatan.push("<li><b>cot B</b> tidak dipakai pada kasus khusus (arah lurus ke utara atau selatan).</li>");
+      continue;
+    }
+    if (isNaN(v)) { box.classList.add("salah"); takTerbaca.push(NAMA_CEK[key]); continue; }
+    diisi++;
+    if (cocok(key, v, kunci[key])) { box.classList.add("benar"); benar++; continue; }
+    box.classList.add("salah");
+    salahPertama = salahPertama || key;
+    catatan.push(`<li><b>${NAMA_CEK[key]}</b>: ${petunjuk(key, v, k)}`
+      + (tertutup ? "" : ` Nilai yang benar: <span class="kunci">${fmtKunci(key, kunci[key])}</span>.`) + "</li>");
+  }
+
+  let html = "";
+  if (!diisi && !takTerbaca.length && !catatan.length) html = "<p>Isi minimal satu kolom jawaban dulu.</p>";
+  else {
+    if (diisi && benar === diisi && !takTerbaca.length) {
+      out.classList.add("ok");
+      html += `<p><b>Semua jawaban yang diisi benar (${benar}/${diisi}).</b>`
+        + (tertutup ? ' Tekan "Tampilkan pembahasan" untuk melihat langkah lengkapnya.' : "") + "</p>";
+    } else if (diisi) {
+      html += `<p><b>${benar} dari ${diisi} benar.</b>`
+        + (salahPertama ? ` Kesalahan pertama ada di <b>${NAMA_CEK[salahPertama]}</b>; langkah sesudahnya bisa ikut salah karena memakai nilai ini.` : "") + "</p>";
+    }
+    if (takTerbaca.length) html += `<p>Format tidak terbaca pada: ${takTerbaca.join(", ")}. Tulis desimal (97,5) atau DMS (97 30 0).</p>`;
+    if (catatan.length) html += `<ul>${catatan.join("")}</ul>`;
+    if (tertutup && benar < diisi) html += '<p>Perbaiki lalu periksa lagi, atau tekan "Tampilkan pembahasan".</p>';
+  }
+  out.innerHTML = html;
+}
+
+$("cekBtn").onclick = periksa;
+$("cekReset").onclick = () => { document.querySelectorAll("#cekGrid input").forEach(i => { i.value = ""; }); bersihkanTanda(); };
+$("bukaBtn").onclick = () => { setTertutup(false); if ($("cekHasil").textContent) periksa(); };
+$("soalBtn").onclick = () => {
+  const pilihan = Object.keys(PRACTICE).filter(n => n !== soalTerakhir);
+  const nama = soalTerakhir = pilihan[Math.floor(Math.random() * pilihan.length)];
+  const [la, ln] = PRACTICE[nama];
+  isiKoordinat(la, ln); setMode("DMS");
+  document.querySelectorAll("#cekGrid input").forEach(i => { i.value = ""; });
+  hitung(true);
+  $("soalInfo").innerHTML = `<b>Soal:</b> tentukan arah kiblat untuk <b>${nama}</b> `
+    + `(${fmtDMS(toDMS(la), la < 0 ? "LS" : "LU")}, ${fmtDMS(toDMS(ln), ln < 0 ? "BB" : "BT")}). Koordinat sudah terisi di panel input.`;
+  $("soalInfo").hidden = false;
+  $("cek-a").focus({preventScroll: true});
+};
+
+/* ---------- salin hasil dan cetak ---------- */
+const lokasiTeks = (lat, lng) => `${fmtDMS(toDMS(lat), lat < 0 ? "LS" : "LU")}, ${fmtDMS(toDMS(lng), lng < 0 ? "BB" : "BT")}`;
+$("copyBtn").onclick = async () => {
+  if (!lastHasil) return;
+  const {k, lat, lng} = lastHasil, btn = $("copyBtn");
+  const teks = [
+    "Qiblad: arah kiblat",
+    `Lokasi: ${lokasiTeks(lat, lng)} (${lat}°, ${lng}°)`,
+    `Sudut B: ${k.B.toFixed(4)}° (${fmtDMS(toDMS(k.B))})`,
+    `Azimuth kiblat: ${k.az.toFixed(4)}° (${fmtDMS(toDMS(k.az))}) dari Utara sejati, searah jarum jam`,
+    `Rumus Azimuth: ${k.rumus}`
+  ].join("\n");
+  try { await navigator.clipboard.writeText(teks); btn.textContent = "Tersalin ✓"; }
+  catch (e) { btn.textContent = "Gagal menyalin"; }
+  setTimeout(() => { btn.textContent = "Salin hasil"; }, 2000);
+};
+$("printBtn").onclick = () => window.print();
+window.addEventListener("beforeprint", () => {
+  $("stepsDetails").open = true;
+  if (!lastHasil) return;
+  const {k, lat, lng} = lastHasil;
+  const tgl = new Date().toLocaleDateString("id-ID", {day: "numeric", month: "long", year: "numeric"});
+  $("printHead").innerHTML = `<b>Qiblad: arah kiblat</b><br>Lokasi ${lokasiTeks(lat, lng)} · Azimuth ${k.az.toFixed(4)}° · Sudut B ${k.B.toFixed(4)}° · dicetak ${tgl}`;
+});
